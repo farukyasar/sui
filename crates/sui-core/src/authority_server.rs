@@ -12,8 +12,10 @@ use crate::{
 use anyhow::anyhow;
 use anyhow::Result;
 use async_trait::async_trait;
+use futures::future::err;
 use futures::{stream::BoxStream, TryStreamExt};
 use multiaddr::Multiaddr;
+use narwhal_types::{Validator, ValidatorServer};
 use std::{io, sync::Arc, time::Duration};
 use sui_config::NodeConfig;
 use sui_network::{
@@ -130,7 +132,7 @@ impl AuthorityServer {
             .spawn_batch_subsystem(self.min_batch_size, self.max_delay)
             .await;
 
-        let mut server = mysten_network::config::Config::new()
+        let mut res = mysten_network::config::Config::new()
             .server_builder()
             .add_service(ValidatorServer::new(ValidatorService {
                 state: self.state,
@@ -138,8 +140,12 @@ impl AuthorityServer {
                 _checkpoint_consensus_handle: None,
             }))
             .bind(&address)
-            .await
-            .unwrap();
+            .await;
+        if res.is_err() {
+            let e = res.as_ref().err().unwrap().to_string();
+            println!("error {:?}", e);
+        }
+        let mut server = res.unwrap();
         let local_addr = server.local_addr().to_owned();
         info!("Listening to traffic on {local_addr}");
         let handle = AuthorityServerHandle {
